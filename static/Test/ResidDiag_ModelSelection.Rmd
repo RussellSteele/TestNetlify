@@ -1,0 +1,73 @@
+---
+title: "Residual Diagnostics"
+output: 
+  revealjs::revealjs_presentation:
+            self_contained: false
+            reveal_plugins: ["chalkboard"]
+            css: custom2.css
+---
+
+## Relevant libraries
+
+```{r Library loading,warning=FALSE,message=FALSE}
+library(tidyverse)
+library(tidyquant)
+library(gridExtra)
+library(tibbletime)
+library(forecast)
+library(itsmr)
+library(here)
+knitr::opts_chunk$set(comment=NA,tidy=FALSE)
+
+#library(future) Not needed yet
+#library(doFuture) Not needed yet
+#library(rbenchmark) Not needed yet
+```
+
+### Wave tank data
+
+```{r}
+#wave_data = read_csv(here("data/wave_data.csv"))
+wave_data = read_csv(here("data/wavedat_new"))
+wave_ts = wave_data %>% pull(waveht) %>% ts(.,frequency=1)
+
+autoplot(wave_ts)
+ggAcf(wave_ts)
+ggPacf(wave_ts)
+
+
+wave_ar2 = ar(wave_ts,order.max = 2)
+wave_ar2$ar
+checkresiduals(wave_ar2)
+
+wave_ar4 = ar(wave_ts,order.max = 4)
+wave_ar4$ar
+checkresiduals(wave_ar4)
+
+wave_arma22 = arima(wave_ts, order=c(2,0,2))
+checkresiduals(wave_arma22)
+
+
+wave_arma44 = arima(wave_ts, order=c(4,0,4))
+checkresiduals(wave_arma44)
+
+```
+
+## Slide with Bullets
+
+- Bullet 1
+- Bullet 2
+- Bullet 3
+
+## Slide with R Code and Output
+
+```{r}
+summary(cars)
+```
+
+## Slide with Plot
+
+```{r, echo=FALSE}
+plot(cars)
+```
+
