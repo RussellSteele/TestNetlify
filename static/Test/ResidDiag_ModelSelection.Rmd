@@ -28,7 +28,7 @@ knitr::opts_chunk$set(comment=NA,tidy=FALSE)
 
 ```{r}
 #wave_data = read_csv(here("data/wave_data.csv"))
-wave_data = read_csv(here("data/wavedat_new"))
+wave_data = read_csv(here("static/Test/data/wavedat_new"))
 wave_ts = wave_data %>% pull(waveht) %>% ts(.,frequency=1)
 
 autoplot(wave_ts)
