@@ -1,7 +1,13 @@
 html,
-body {
+body { 
+  height: 100%;
+  margin: 0;
   position: fixed;
   overflow: hidden;
   overflow-y: scroll; /* has to be scroll, not auto */
   -webkit-overflow-scrolling: touch;
+}
+.scroll {
+ overflow: auto;
+ height: 100%;
 }
