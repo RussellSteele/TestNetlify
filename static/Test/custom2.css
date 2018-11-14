@@ -1,6 +1,7 @@
 html,
 body { 
   height: 100%;
+  width: 100%;
   margin: 0;
   position: fixed;
   overflow: hidden;
@@ -8,6 +9,7 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 .scroll {
- overflow: auto;
+ overflow: hidden;
+ position: fixed;
  height: 100%;
 }
