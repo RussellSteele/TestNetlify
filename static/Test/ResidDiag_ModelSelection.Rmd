@@ -6,9 +6,10 @@ output:
             reveal_plugins: ["chalkboard"]
             reveal_options:
               slideNumber: true
-              minScale: 1
-              maxScale: 1
-              css: custom2.css
+              height: "100%"
+              width: "100%"
+              position: "fixed"
+              overflow: "hidden"
 ---
 
 ## Relevant libraries
