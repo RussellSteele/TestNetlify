@@ -2,5 +2,6 @@ html,
 body {
   position: fixed;
   overflow: hidden;
-  overflow-y: scroll;
+  overflow-y: scroll; /* has to be scroll, not auto */
+  -webkit-overflow-scrolling: touch;
 }
