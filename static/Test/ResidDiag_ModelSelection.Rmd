@@ -11,6 +11,7 @@ output:
             margin: 0
             position: "fixed"
             overflow: "hidden"
+            css: custom2.css
 ---
 
 ## Relevant libraries
