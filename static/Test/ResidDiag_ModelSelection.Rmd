@@ -6,6 +6,8 @@ output:
             reveal_plugins: ["chalkboard"]
             reveal_options:
             slideNumber: true
+            height: "100%"
+            width: "100%"
             css: custom2.css
 ---
 
