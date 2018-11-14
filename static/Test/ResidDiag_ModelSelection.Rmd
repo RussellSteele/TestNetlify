@@ -9,7 +9,8 @@ output:
             height: "100%"
             width: "100%"
             margin: 0
-            css: custom2.css
+            position: "fixed"
+            overflow: "hidden"
 ---
 
 ## Relevant libraries
