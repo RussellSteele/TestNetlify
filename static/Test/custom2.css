@@ -2,4 +2,5 @@ html,
 body {
   position: fixed;
   overflow: hidden;
+  overflow-y: scroll;
 }
