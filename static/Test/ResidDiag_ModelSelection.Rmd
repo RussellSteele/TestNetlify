@@ -5,11 +5,8 @@ output:
             self_contained: false
             reveal_plugins: ["chalkboard"]
             reveal_options:
-              slideNumber: true
-              height: "100%"
-              width: "100%"
-              position: "fixed"
-              overflow: "hidden"
+            slideNumber: true
+            css: custom2.css
 ---
 
 ## Relevant libraries

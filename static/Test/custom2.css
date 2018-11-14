@@ -1,8 +1,9 @@
 html,
 body { 
-
-  overflow-y: scroll; /* has to be scroll, not auto */
-  -webkit-overflow-scrolling: touch;
+   height: 100%;
+   width: 100%;
+   position: fixed;
+   overflow: hidden;
 }
 .scroll {
  overflow: hidden;
