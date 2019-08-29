@@ -1,0 +1,970 @@
+---
+title: "Decision-driven sensitivity analyses via Bayesian optimization"
+author: Russell Steele and Louis Arsenault-Mahjoubi, Mcgill University
+ext_widgets: {rCharts: "libraries/highcharts"}
+output: 
+  revealjs::revealjs_presentation:
+    theme: night
+    reveal_options:
+      slideNumber: true
+    self_contained: false
+    reveal_plugins: ["chalkboard"]
+---
+```{r setup, include=FALSE}
+library(tidyverse)
+library(knitr)
+library(gridExtra)
+library(kableExtra)
+library(here)
+library(metafor)
+library(meta)
+library(foreign)
+#library(ggdag)
+library(grid)
+library(Gmisc)
+library(gpe)
+library(mvtnorm)
+library(png)
+options(knitr.kable.NA="")
+opts_chunk$set(comment=NA,results='asis')
+knitr::opts_chunk$set(echo = FALSE,tidy.opts=list(width.cutoff=80),tidy=TRUE,
+                      out.height="75%", out.width="75%",comment=NA,warning=FALSE,message=FALSE)
+options(knitr.kable.NA="")
+```
+# A classic dataset 
+
+## Magnesium and MI
+
+```{r,echo=FALSE}
+magnes_data=read.dta(here("data/magnes.dta"))
+magnes_data_noSch1 = magnes_data %>% filter(trialnam!="Schechter 1") %>% 
+  mutate(Study=paste(trialnam,year," ")) %>%
+  rename(Year=year,N_m = tot1,N_c=tot0,Y_m=dead1,Y_c=dead0) %>% 
+  mutate(p_m=Y_m/N_m,p_c=Y_c/N_c,Beneficial=factor(ifelse(p_m>=p_c,"Harmful","Beneficial")),
+         #TotalSize = cut(x=N_m+N_c,breaks=c(0,50,250,1000,2500,5000,25000,60000)))
+          TotalSize=N_m+N_c)
+#magnes_data_noSch1  %>%  select(Study,N_m:Y_c)%>%kable(.)
+
+ggplot(magnes_data_noSch1,aes(x=p_c,y=p_m,color=Beneficial,size=TotalSize)) + 
+         geom_point() + geom_abline(slope=1,intercept=0) +
+  ylab("Proportion of Deaths: Magnesium")+xlab("Proportion of Deaths: Control") + 
+  scale_size_continuous(breaks=c(0,50,100,250,1000,5000,25000,60000),
+                      labels=c(50,100,250,1000,5000,25000,60000,10000),
+                      range=c(1,10),
+                      name="Total Sample Size")+xlim(c(0,0.4))+ylim(c(0,0.4)) + 
+  ggtitle("From Sterne, et al. (2001) and Higgins and Spiegelhalter (2002)")
+```
+
+
+## Magnesium and MI (cont.)
+
+```{r,echo=FALSE}
+magnes_data_noSch1 = magnes_data_noSch1 %>% mutate(adjOR = (0.5+Y_m)*(0.5+N_c-Y_c)/((0.5+Y_c)*(0.5+N_m-Y_m)))
+ggplot(magnes_data_noSch1,aes(x=TotalSize,y=adjOR,color=Beneficial)) + geom_point() + scale_x_log10()+ 
+  geom_hline(yintercept=1) + ylim(c(0,1.4)) + ylab("Odds Ratio") + xlab("Sample Size")
+```
+
+## Classical meta-analysis results
+
+
+```{r,echo=FALSE,results="markdown"}
+classic_meta=metabin(Y_m,N_m,Y_c,N_c,studlab=Study,data=magnes_data_noSch1,sm="OR")
+summary(classic_meta)
+```
+
+## Into the woods 
+
+```{r,echo=FALSE}
+classic_meta_rez = with(classic_meta, 
+                        data_frame(Study=studlab,
+                                   TE=(TE),
+                                   seTE=TE,
+                                   LCB=(lower),
+                                   UCB=(upper),
+                                   wt.fixed=w.fixed/sum(w.fixed),
+                                   wt.random=w.random/sum(w.random),
+                                   Type="Study"
+                        ))
+classic_meta_rez_sum = with(classic_meta,
+                            data_frame(Study=c("Fixed","Random"),
+                                       TE=c(TE.fixed,TE.random),
+                                       seTE=c(seTE.fixed,seTE.random),
+                                       LCB=(c(lower.fixed,lower.random)),
+                                       UCB=(c(upper.fixed,upper.random)),
+                                       wt.fixed=c(NA,NA),
+                                       wt.random=c(NA,NA),
+                                       Type=c("Fixed","Random")))
+classic_meta_rez_full = classic_meta_rez %>% bind_rows(classic_meta_rez_sum)
+classic_meta_rez_full = classic_meta_rez_full %>% mutate(Study=factor(Study,levels=rev(Study)))
+
+ORbreaks = c(0.1, 0.5,1, 2,10)
+
+p1 = ggplot(classic_meta_rez_full,aes(y=Study,x=TE,colour=Type)) + geom_point(size=2)  + geom_errorbarh(aes(xmax=UCB,xmin=LCB),height=0.25,size=1.15) + geom_vline(xintercept=0) +
+  scale_x_continuous(breaks=c(log(ORbreaks)), labels=ORbreaks) + xlab(label="Odds Ratio") + guides(colour=FALSE)
+
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+mycolor= gg_color_hue(3)
+
+p2=ggplot(classic_meta_rez_full, aes(x=Study,y=wt.random)) + geom_bar(stat='identity',fill=mycolor[2]) + 
+   ylab(c("Wt (Random)"))  + coord_flip() + ylim(c(0,1)) + theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank()) + scale_y_continuous(limits=c(0,1),breaks=c(0,0.5,1))
+
+
+p3 = ggplot(classic_meta_rez_full, aes(x=Study,y=wt.fixed)) + geom_bar(stat='identity',fill=mycolor[1]) + coord_flip() + 
+  ylim(c(0,1)) + ylab("Wt (Fixed)") + theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())+ scale_y_continuous(limits=c(0,1),breaks=c(0,0.5,1))
+
+grid.arrange(grobs=list(p1,p2,p3), layout_matrix=matrix(c(1,2,3),nrow=1), widths=c(5,1,1))
+
+
+```
+
+
+## Alternative Bayesian model
+
+```{r,echo=FALSE}
+midx=0.5
+leftx= 0.25
+rightx = 0.75
+gp = gpar(fill = "lightgrey")
+gp2 = gpar(fill = "lightblue")
+gp3 = gpar(fill = "lightyellow")
+
+
+width=0.4
+
+grid.newpage()
+
+magexp = expression(paste("Mag Deaths for Study i ~ Bin(",n[i],",",p[i],")"))
+
+(mag_data = boxGrob(magexp, 
+                    x=leftx,y=0.9,box_gp=gp3,width=width))
+
+plot(mag_data)
+
+contexp = expression(paste("Cont Deaths for Study i ~ Bin(",n[i],",",q[i],")"))
+
+(cont_data = boxGrob(contexp, 
+                    x=rightx,y=0.9,box_gp=gp3,width=width))
+plot(cont_data)
+
+pexp  = expression(paste("logit(",p[i],")  = ",delta[i] + phi[i]))
+(p_i = boxGrob(pexp,
+                  x=leftx, y=0.6,width=width,box_gp=gp2)) 
+
+plot(p_i)
+
+q_exp = expression(paste(q[i],"~ Unif(0,1)"))
+
+(q_i = boxGrob(q_exp, 
+                    x=rightx,y=0.6,box_gp=gp,width=width))
+
+phi_exp = expression(paste("logit(",q[i],") = ",phi[i]))
+
+(phi_i = boxGrob(phi_exp,
+                  x=rightx, y=0.35,width=width,box_gp=gp2)) 
+
+plot(phi_i)
+
+
+e_m_p = connectGrob(p_i,mag_data,"v",arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")))
+e_m_q = connectGrob(q_i,cont_data,"v",arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")))
+e_p_phi = connectGrob(phi_i,p_i,"Z",arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")))
+
+plot(e_m_p)
+plot(e_m_q)
+plot(e_p_phi)
+
+delt_exp = expression(paste(delta[i],"~ Norm(",mu,",",tau,")"))
+
+(delta_i = boxGrob(delt_exp, 
+                    x=leftx,y=0.35,box_gp=gp,width=width))
+
+
+d_p = connectGrob(delta_i,p_i,"vertical",arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")))
+ph_q = connectGrob(q_i,phi_i,"vertical",arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")))
+
+plot(d_p)
+plot(ph_q)
+
+muexp = expression(paste(mu,"~ ",Norm(0,eta)))
+
+(mu = boxGrob(muexp,
+              x=leftx-(midx-leftx)/2, y=0.1,box_gp=gp,width=width/2))
+
+tauexp = expression(paste(tau,"~ HalfCauchy(0,s)"))
+(tau = boxGrob(tauexp,
+            x=leftx+(midx-leftx)/2, y=0.1, box_gp=gp,width=width/2))
+
+plot(mu)
+plot(tau)
+
+d_mu = connectGrob(mu,delta_i, "vertical",arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")))
+d_tau = connectGrob(tau,delta_i,"vertical",arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")))
+
+plot(d_mu)
+plot(d_tau)
+```
+
+
+## Understanding the prior for $\mu$ 
+
+
+```{r,echo=FALSE}
+
+prior_norm_curves = data_frame(eta = c(0.1, 0.4, 0.7))
+
+xseq = seq(-2.5,2.5,length=500)
+
+plot_data = pmap_df(prior_norm_curves, 
+                    function(eta){
+                      tibble(eta=eta,x=xseq,
+                             y = dnorm(xseq,0,eta))
+                    })
+
+ggplot(data=plot_data,aes(group=factor(eta),x=x,y=y,colour=factor(eta))) + geom_line(size=1.25) + 
+  scale_x_continuous(breaks=log(ORbreaks), labels=ORbreaks) + scale_colour_discrete(name=expression(eta))
+
+```
+
+## Effect of the prior for $\mu$ 
+
+```{r,echo=FALSE}
+stan_out_147 = read_csv(here("results/stan_out_147.csv"))
+
+p_out = ggplot(stan_out_147, aes(x=medianOR,y=stat(density), fill=factor(eta))) + geom_histogram(bins=40,col="black")+
+  facet_grid(rows=vars(eta)) + geom_vline(xintercept=1) + scale_fill_discrete(name=expression(eta)) + ylab("Posterior density") + xlab("")
+
+post_probs = stan_out_147 %>% group_by(eta) %>% summarise(PostProbs = sum(medianOR<1)/n())
+
+p_out + geom_text(data=post_probs,aes(label=paste("Pr(mOR<1 | y) =",round(PostProbs,3)),x=1.22,y=3))
+
+```
+
+
+## Tell me what you want... 
+
+```{r,echo=FALSE}
+knitr::include_graphics(here("spice.gif"))
+```
+
+## The real goal of a sensitivity analysis
+
+```{r,echo=FALSE}
+examp_df = data_frame(seqx = seq(0,1,length=1000), 
+           examp_curve = pnorm(seqx,0.4,0.1))
+
+bene_df = data_frame(label=c("Protective","Not Protective"),x=c(0.75,0.25), y=c(0.5,0.5))
+
+ggplot(examp_df,aes(x=seqx,y=examp_curve)) + geom_line(data=examp_df %>% filter(seqx>qnorm(0.9,0.4,0.1)), col="blue",size=1.15) + geom_hline(yintercept=0.9,size=1.15)+ 
+  ylab("Pr(mOR<1 | y)") + xlab(expression(eta)) + 
+  geom_ribbon(data=examp_df %>% filter(seqx>=qnorm(0.9,0.4,0.1)), aes(ymax=examp_curve,ymin=0.9),fill="blue")+ 
+  geom_vline(xintercept=c(1,qnorm(0.9,0.4,0.1)),col="blue",size=1.15) + geom_line(data=examp_df %>% filter(seqx<=qnorm(0.9,0.4,0.1)), col="red",size=1.15) +
+  geom_text(data=bene_df,aes(x=x,y=y,label=label),col=c("blue","red"))
+
+
+```
+
+# Using some Bayes to solve your Bayes
+
+
+
+## The problem: Need the function! 
+
+```{r,echo=FALSE}
+
+post_probs = post_probs %>% mutate(phi_inv = qnorm(PostProbs))
+
+ggplot(post_probs,aes(x=eta,y=PostProbs)) + geom_point()  + xlim(c(0,1)) + ylim(c(0,1.25)) + 
+  geom_hline(yintercept=0.9) + ylab("Pr(mOR<1 | y)") + xlab(expression(eta))
+```
+
+## Gaussian Processes: Function as parameter
+
+```{r,echo=FALSE}
+midx=0.5
+leftx= 0.25
+rightx = 0.75
+grp = gpar(fill = "lightgrey")
+grp2 = gpar(fill = "lightblue")
+grp3 = gpar(fill = "lightyellow")
+grp4 = gpar(fill = "lightgreen")
+
+
+width=0.4
+
+grid.newpage()
+
+func_exp = expression(paste(plain(PostProb),(eta[i]),"~ Normal(",f(eta[i]),",",sigma[e]^2,")"))
+                        
+(func_data = boxGrob(func_exp, 
+                    x=midx,y=0.9,box_gp=grp3,width=width))
+
+plot(func_data)
+
+f_exp = expression(paste("f(.) ~ GaussianProcess(0, K(s,t))"))
+
+(f_data = boxGrob(f_exp, x=leftx, y=0.6,box_gp=grp,width=width))
+
+plot(f_data)
+
+sig_exp = expression(paste(sigma[e]^2,"~ Inv-",chi[nu]^2))
+
+(sig_data = boxGrob(sig_exp, x=rightx, y=0.6, box_gp=grp,width=width))
+
+plot(sig_data)
+
+func_f = connectGrob(f_data,func_data, 
+                     "vertical",arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")))
+
+
+func_f = connectGrob(f_data,func_data, 
+                     "vertical",arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")))
+
+plot(func_f)
+
+func_sig = connectGrob(sig_data,func_data, 
+                     "vertical",arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")))
+
+plot(func_sig)
+
+exp_exp = expression(paste("If f(.)~GP(0,K(s,t)), then [",f(s[1]),",", f(s[2]),",",cdots, ",", f(s[n]), "] ~ MNV(0,",
+                           Sigma,") with ",Sigma[ij] == Cov,"(",f(s[i]),",",f(s[j]),") = K(s[i],s[j])"))
+                           
+
+boxGrob(exp_exp, x=midx, y=0.3, box_gp=grp4,width=0.95)
+
+```
+
+## Gaussian Processes: draws from $\pi(f(\cdot) | \mbox{PostProb}(\eta))$
+
+```{r,echo=FALSE}
+set.seed(1051)
+
+post_func = getAnywhere("project_direct_full")[[2]][[1]]
+
+pred_df = data_frame(eta=seq(0,1,length=101))
+#gp_obj = with(post_probs, gausspr(x=eta,y=PostProbs,variance.model=TRUE,type="regression"))
+gp_obj = gpe::gp(PostProbs~mat32('eta'),data=post_probs)
+pred_obj = predict(gp_obj,pred_df,type="response",sd=TRUE)
+myparams=post_func(gp_obj$posterior,pred_df %>% select(eta),variance="matrix")
+sample_df = data_frame(PostProbs=as.numeric(rmvnorm(5,myparams$mu,unclass(myparams$var))), 
+                       eta = rep(pred_df %>% pull(eta),each=5), 
+                       draw = rep(1:5,length(eta)/5))
+ggplot(post_probs,aes(x=eta,y=PostProbs)) + geom_point()  + xlim(c(0,1)) + ylim(c(0,1.25)) + 
+  geom_line(data=sample_df,aes(group=draw,col=factor(draw)),size=1.05) + 
+  scale_colour_discrete(name="Sample") + 
+  geom_hline(yintercept=0.9)  + ylab("Pr(mOR<1 | y)") + xlab(expression(eta)) + ylim(c(0,2))
+
+```
+
+
+## Using the mean vs. using point-wise confidence bands
+
+```{r,echo=FALSE}
+
+pred_df = pred_df %>% mutate(PostProbs=as.numeric(pred_obj$fit),
+                             se = ifelse(!is.na(pred_obj$sd),pred_obj$sd,0), 
+                             lower = PostProbs - 1.96*se,
+                             upper = PostProbs + 1.96*se)
+
+ggplot(post_probs,aes(x=eta,y=PostProbs))  + xlim(c(0,1)) + ylim(c(0,2)) +
+  geom_ribbon(data=pred_df,aes(ymin=lower,ymax=upper),fill="lightgreen",alpha=0.5) + 
+  geom_line(data=sample_df,aes(group=draw,linetype=factor(draw)),alpha=0.5) + 
+  scale_linetype_discrete(name="Sample") + guides(linetype=FALSE)+
+  geom_path(data=pred_df,aes(x=eta,y=PostProbs,col=factor(I(PostProbs>0.9)),group=1),size=1.25 ) + geom_point() + 
+  geom_hline(yintercept=0.9,col="black") + scale_colour_discrete(name="Pr(mOR<1|y)", labels=c("<=0.9 (Not Protective)",">0.9 (Protective")) + ylab("Pr(mOR<1 | y)") + xlab(expression(eta))
+
+
+```
+
+## Classifying points 
+
+
+```{r,echo=FALSE}
+pred_df = pred_df %>% mutate(ClassificationI = 1*(lower>0.9) + (-1)*(upper<0.9) + 0, 
+                             Classification = recode(ClassificationI, 
+                                                     '1'='Protective', '-1'='Not Protective', '0'='Unclassified'))
+```
+
+
+```{r,echo=FALSE}
+poly_frame = rbind(pred_df %>% mutate(myframe=1),pred_df%>%mutate(myframe=2)) %>% select(eta,ClassificationI,myframe,lower,upper) %>% gather(key=lu, value=limit, -eta:-myframe) %>% arrange(eta,myframe) %>% slice(-c(1:2,(nrow(.)-1),nrow(.)))
+
+poly_frame = poly_frame %>% mutate(ID=rep(1:(nrow(poly_frame)/4),each=4))
+poly_frame = poly_frame %>% group_by(ID) %>% mutate(ClassificationNew=ClassificationI[lu=="upper" & myframe==1])
+
+poly_frame = poly_frame %>%  mutate(myorder = 1*(myframe==1 & lu=="upper")+
+                                                               2*(myframe==1 & lu =="lower") + 
+                                                               3*(myframe==2 & lu =="lower") + 
+                                                               4*(myframe==2 & lu =="upper"))  %>% arrange(eta,myorder)
+
+
+myplot= ggplot(poly_frame ,aes(x=eta,y=limit,group=ID,fill=factor(ClassificationNew))) + geom_polygon() + 
+  xlim(c(0,1)) + ylim(c(0,2)) + geom_hline(yintercept=0.9) + 
+  scale_fill_manual(name="Classified",labels=c("Not Protective","Unclassified","Protective"),
+                    values=c("red","grey","blue")) + xlab(expression(eta)) + ylab("Pr(mOR<1 | y)") +
+  geom_segment(data=poly_frame %>% ungroup() %>% filter(myframe==2 & lu =="lower") %>% mutate(lagged=lag(eta)), 
+               aes(x=eta,xend=lagged, y=0.05,yend=0.05,colour=factor(ClassificationNew)),size=3) + 
+   scale_colour_manual(name="Classified",labels=c("Not Protective","Unclassified","Protective"),
+                    values=c("red","grey","blue")) + guides(colour=FALSE)
+myplot
+```
+
+
+## Where to evaluate the function next? 
+
+| Exploit       | Explore       | 
+|:-------------:|:-------------:| 
+|![](exploit.png)|![](explore.png)|
+
+
+## Defining the utility function 
+
+```{r,echo=FALSE}
+annotated = myplot + annotate("text",x=0.34,y=1,label="Exploit",col="purple",angle=90) + 
+  annotate("text",x=0.9,y=1,label="Explore",col="purple",angle=90) + 
+  annotate("text",x=0.5,y=0.3,
+           label=expression(paste("Ambiguity(x) = min(UCB-0.9, 0.9 - LCB)")),
+           col="blue",size=4)
+```
+
+```{r,echo=FALSE}
+pred_df = pred_df %>% mutate(ambig = pmin(upper-0.9,0.9-lower))
+bottom = ggplot(pred_df, aes(x=eta,y=ambig)) + geom_line(size=1.15) + ylab("Ambiguity") + xlab(expression(eta))
+
+grid.arrange(grobs=list(annotated+guides(fill=FALSE),bottom),heights=c(3,1),layout_matrix=matrix(c(1,2),ncol=1))
+```
+
+## Update
+
+```{r}
+stan_out_1.0 = read_csv(here("results/stan_out_1.0.csv"))
+post_probs = rbind(stan_out_147,stan_out_1.0) %>% group_by(eta) %>% summarise(PostProbs = sum(medianOR<1)/n())
+
+pred_df = data_frame(eta=seq(0,1,length=101))
+#gp_obj = with(post_probs, gausspr(x=eta,y=PostProbs,variance.model=TRUE,type="regression"))
+gp_obj = gpe::gp(PostProbs~mat32('eta'),data=post_probs)
+pred_obj = predict(gp_obj,pred_df,type="response",sd=TRUE)
+
+pred_df = pred_df %>% mutate(PostProbs=as.numeric(pred_obj$fit),
+                             se = ifelse(!is.na(pred_obj$sd),pred_obj$sd,0), 
+                             lower = PostProbs - 1.96*se,
+                             upper = PostProbs + 1.96*se)
+ggplot(post_probs,aes(x=eta,y=PostProbs))  + xlim(c(0,1)) + ylim(c(0,2)) +
+  geom_ribbon(data=pred_df,aes(ymin=lower,ymax=upper),fill="lightgreen",alpha=0.5) + 
+  geom_path(data=pred_df,aes(x=eta,y=PostProbs,col=factor(I(PostProbs>0.9)),group=1),size=1.25 ) + geom_point() + 
+  geom_hline(yintercept=0.9,col="black") + scale_colour_discrete(name="Pr(mOR<1|y)", labels=c("<=0.9 (Not Protective)",">0.9 (Protective")) + ylab("Pr(mOR<1 | y)") + xlab(expression(eta))
+```
+
+## Where to go next? 
+
+```{r,echo=FALSE}
+pred_df = pred_df %>% mutate(ClassificationI = 1*(lower>0.9) + (-1)*(upper<0.9) + 0, 
+                             Classification = recode(ClassificationI, 
+                                                     '1'='Protective', '-1'='Not Protective', '0'='Unclassified',
+                                                     'NA'='Protective'))
+
+poly_frame = rbind(pred_df %>% mutate(myframe=1),pred_df%>%mutate(myframe=2)) %>% select(eta,ClassificationI,myframe,lower,upper) %>% gather(key=lu, value=limit, -eta:-myframe) %>% arrange(eta,myframe) %>% slice(-c(1:2,(nrow(.)-1),nrow(.)))
+
+poly_frame = poly_frame %>% mutate(ID=rep(1:(nrow(poly_frame)/4),each=4))
+poly_frame = poly_frame %>% group_by(ID) %>% mutate(ClassificationNew=ClassificationI[lu=="upper" & myframe==1])
+
+poly_frame = poly_frame %>%  mutate(myorder = 1*(myframe==1 & lu=="upper")+
+                                                               2*(myframe==1 & lu =="lower") + 
+                                                               3*(myframe==2 & lu =="lower") + 
+                                                               4*(myframe==2 & lu =="upper"))  %>% arrange(eta,myorder)
+
+
+myplot= ggplot(poly_frame ,aes(x=eta,y=limit,group=ID,fill=factor(ClassificationNew))) + geom_polygon() + 
+  xlim(c(0,1)) + ylim(c(0,2)) + geom_hline(yintercept=0.9) + 
+  scale_fill_manual(name="Classified",labels=c("Not Protective","Unclassified","Protective"),
+                    values=c("red","grey","blue")) + xlab(expression(eta)) + ylab("Pr(mOR<1 | y)") +
+  geom_segment(data=poly_frame %>% ungroup() %>% filter(myframe==2 & lu =="lower") %>% mutate(lagged=lag(eta)), 
+               aes(x=eta,xend=lagged, y=0.05,yend=0.05,colour=factor(ClassificationNew)),size=3) + 
+   scale_colour_manual(name="Classified",labels=c("Not Protective","Unclassified","Protective","Boundary"),
+                    values=c("red","grey","blue","black")) + guides(colour=FALSE) + guides(fill=FALSE) + 
+  geom_line(data=pred_df %>% mutate(ID=1,ClassificationNew=NA),aes(x=eta,y=PostProbs),size=1.15,col="darkgreen") + 
+    geom_point(data=post_probs %>% mutate(ID=1,ClassificationNew=NA),aes(x=eta,y=PostProbs))
+
+#myplot
+
+
+pred_df = pred_df %>% mutate(ambig = pmin(upper-0.9,0.9-lower))
+bottom = ggplot(pred_df, aes(x=eta,y=ambig)) + geom_line(size=1.15) + ylab("Ambiguity") + xlab(expression(eta))
+
+grid.arrange(grobs=list(myplot,bottom),heights=c(3,1),layout_matrix=matrix(c(1,2),ncol=1))
+```
+
+## Where to go next? 
+
+```{r}
+stan_out_0.001 = read_csv(here("results/stan_out_001.csv"))
+post_probs = rbind(stan_out_147,stan_out_1.0,stan_out_0.001) %>% group_by(eta) %>% summarise(PostProbs = sum(medianOR<1)/n())
+
+pred_df = data_frame(eta=seq(0,1,length=101))
+#gp_obj = with(post_probs, gausspr(x=eta,y=PostProbs,variance.model=TRUE,type="regression"))
+gp_obj = gpe::gp(PostProbs~mat32('eta'),data=post_probs)
+pred_obj = predict(gp_obj,pred_df,type="response",sd=TRUE)
+
+pred_df = pred_df %>% mutate(PostProbs=as.numeric(pred_obj$fit),
+                             se = pred_obj$sd, 
+                             lower = PostProbs - 1.96*se,
+                             upper = PostProbs + 1.96*se)
+# ggplot(post_probs,aes(x=eta,y=PostProbs))  + xlim(c(0,1)) + ylim(c(0,2)) +
+#   geom_ribbon(data=pred_df,aes(ymin=lower,ymax=upper),fill="lightgreen",alpha=0.5) + 
+#   geom_path(data=pred_df,aes(x=eta,y=PostProbs,col=factor(I(PostProbs>0.9)),group=1),size=1.25 ) + geom_point() + 
+#   geom_hline(yintercept=0.9,col="black") + scale_colour_discrete(name="Pr(mOR<1|y)", labels=c("<=0.9 (Not Protective)",">0.9 (Protective")) + ylab("Pr(mOR<1 | y)") + xlab(expression(eta))
+
+pred_df = pred_df %>% mutate(ClassificationI = 1*(lower>0.9) + (-1)*(upper<0.9) + 0, 
+                             Classification = recode(ClassificationI, 
+                                                     '1'='Protective', '-1'='Not Protective', '0'='Unclassified',
+                                                     'NA'='Protective'))
+
+poly_frame = rbind(pred_df %>% mutate(myframe=1),pred_df%>%mutate(myframe=2)) %>% select(eta,ClassificationI,myframe,lower,upper) %>% gather(key=lu, value=limit, -eta:-myframe) %>% arrange(eta,myframe) %>% slice(-c(1:2,(nrow(.)-1),nrow(.)))
+
+poly_frame = poly_frame %>% mutate(ID=rep(1:(nrow(poly_frame)/4),each=4))
+poly_frame = poly_frame %>% group_by(ID) %>% mutate(ClassificationNew=ClassificationI[lu=="upper" & myframe==1])
+
+poly_frame = poly_frame %>%  mutate(myorder = 1*(myframe==1 & lu=="upper")+
+                                                               2*(myframe==1 & lu =="lower") + 
+                                                               3*(myframe==2 & lu =="lower") + 
+                                                               4*(myframe==2 & lu =="upper"))  %>% arrange(eta,myorder)
+
+
+myplot= ggplot(poly_frame ,aes(x=eta,y=limit,group=ID,fill=factor(ClassificationNew))) + geom_polygon() + 
+  xlim(c(0,1)) + ylim(c(0,2)) + geom_hline(yintercept=0.9) + 
+  scale_fill_manual(name="Classified",labels=c("Not Protective","Unclassified","Protective"),
+                    values=c("red","grey","blue")) + xlab(expression(eta)) + ylab("Pr(mOR<1 | y)") +
+  geom_segment(data=poly_frame %>% ungroup() %>% filter(myframe==2 & lu =="lower") %>% mutate(lagged=lag(eta)), 
+               aes(x=eta,xend=lagged, y=0.05,yend=0.05,colour=factor(ClassificationNew)),size=3) + 
+   scale_colour_manual(name="Classified",labels=c("Not Protective","Unclassified","Protective","Boundary"),
+                    values=c("red","grey","blue","black")) + guides(colour=FALSE) + guides(fill=FALSE) + 
+  geom_line(data=pred_df %>% mutate(ID=1,ClassificationNew=NA),aes(x=eta,y=PostProbs),size=1.15,col="darkgreen") + 
+    geom_point(data=post_probs %>% mutate(ID=1,ClassificationNew=NA),aes(x=eta,y=PostProbs))
+
+#myplot
+
+
+pred_df = pred_df %>% mutate(ambig = pmin(upper-0.9,0.9-lower))
+bottom = ggplot(pred_df, aes(x=eta,y=ambig)) + geom_line(size=1.15) + ylab("Ambiguity") + xlab(expression(eta))
+
+grid.arrange(grobs=list(myplot,bottom),heights=c(3,1),layout_matrix=matrix(c(1,2),ncol=1))
+```
+
+## Where to go next? 
+
+```{r}
+stan_out_55 = read_csv(here("results/stan_out_55.csv"))
+post_probs = rbind(stan_out_147,stan_out_1.0,stan_out_0.001,stan_out_55) %>% group_by(eta) %>% summarise(PostProbs = sum(medianOR<1)/n())
+
+pred_df = data_frame(eta=seq(0,1,length=101))
+#gp_obj = with(post_probs, gausspr(x=eta,y=PostProbs,variance.model=TRUE,type="regression"))
+gp_obj = gpe::gp(PostProbs~mat32('eta'),data=post_probs)
+pred_obj = predict(gp_obj,pred_df,type="response",sd=TRUE)
+
+pred_df = pred_df %>% mutate(PostProbs=as.numeric(pred_obj$fit),
+                             se = pred_obj$sd, 
+                             lower = PostProbs - 1.96*se,
+                             upper = PostProbs + 1.96*se)
+# ggplot(post_probs,aes(x=eta,y=PostProbs))  + xlim(c(0,1)) + ylim(c(0,2)) +
+#   geom_ribbon(data=pred_df,aes(ymin=lower,ymax=upper),fill="lightgreen",alpha=0.5) + 
+#   geom_path(data=pred_df,aes(x=eta,y=PostProbs,col=factor(I(PostProbs>0.9)),group=1),size=1.25 ) + geom_point() + 
+#   geom_hline(yintercept=0.9,col="black") + scale_colour_discrete(name="Pr(mOR<1|y)", labels=c("<=0.9 (Not Protective)",">0.9 (Protective")) + ylab("Pr(mOR<1 | y)") + xlab(expression(eta))
+
+pred_df = pred_df %>% mutate(ClassificationI = 1*(lower>0.9) + (-1)*(upper<0.9) + 0, 
+                             Classification = recode(ClassificationI, 
+                                                     '1'='Protective', '-1'='Not Protective', '0'='Unclassified',
+                                                     'NA'='Protective'))
+
+poly_frame = rbind(pred_df %>% mutate(myframe=1),pred_df%>%mutate(myframe=2)) %>% select(eta,ClassificationI,myframe,lower,upper) %>% gather(key=lu, value=limit, -eta:-myframe) %>% arrange(eta,myframe) %>% slice(-c(1:2,(nrow(.)-1),nrow(.)))
+
+poly_frame = poly_frame %>% mutate(ID=rep(1:(nrow(poly_frame)/4),each=4))
+poly_frame = poly_frame %>% group_by(ID) %>% mutate(ClassificationNew=ClassificationI[lu=="upper" & myframe==1])
+
+poly_frame = poly_frame %>%  mutate(myorder = 1*(myframe==1 & lu=="upper")+
+                                                               2*(myframe==1 & lu =="lower") + 
+                                                               3*(myframe==2 & lu =="lower") + 
+                                                               4*(myframe==2 & lu =="upper"))  %>% arrange(eta,myorder)
+
+
+myplot= ggplot(poly_frame ,aes(x=eta,y=limit,group=ID,fill=factor(ClassificationNew))) + geom_polygon() + 
+  xlim(c(0,1)) + ylim(c(0,2)) + geom_hline(yintercept=0.9) + 
+  scale_fill_manual(name="Classified",labels=c("Not Protective","Unclassified","Protective"),
+                    values=c("red","grey","blue")) + xlab(expression(eta)) + ylab("Pr(mOR<1 | y)") +
+  geom_segment(data=poly_frame %>% ungroup() %>% filter(myframe==2 & lu =="lower") %>% mutate(lagged=lag(eta)), 
+               aes(x=eta,xend=lagged, y=0.05,yend=0.05,colour=factor(ClassificationNew)),size=3) + 
+   scale_colour_manual(name="Classified",labels=c("Not Protective","Unclassified","Protective","Boundary"),
+                    values=c("red","grey","blue","black")) + guides(colour=FALSE) + guides(fill=FALSE) + 
+  geom_line(data=pred_df %>% mutate(ID=1,ClassificationNew=NA),aes(x=eta,y=PostProbs),size=1.15,col="darkgreen") + 
+    geom_point(data=post_probs %>% mutate(ID=1,ClassificationNew=NA),aes(x=eta,y=PostProbs))
+
+#myplot
+
+
+pred_df = pred_df %>% mutate(ambig = pmin(upper-0.9,0.9-lower))
+bottom = ggplot(pred_df, aes(x=eta,y=ambig)) + geom_line(size=1.15) + ylab("Ambiguity") + xlab(expression(eta))
+
+grid.arrange(grobs=list(myplot,bottom),heights=c(3,1),layout_matrix=matrix(c(1,2),ncol=1))
+```
+
+
+## Where to go next? 
+
+```{r}
+stan_out_86 = read_csv(here("results/stan_out_86.csv"))
+post_probs = rbind(stan_out_147,stan_out_1.0,stan_out_0.001,stan_out_55,stan_out_86) %>% group_by(eta) %>% summarise(PostProbs = as.double(sum(medianOR<1)/n()))
+
+pred_df = data_frame(eta=seq(0,1,length=101))
+#gp_obj = with(post_probs, gausspr(x=eta,y=PostProbs,variance.model=TRUE,type="regression"))
+gp_obj = gpe::gp(PostProbs~mat32('eta'),data=post_probs)
+pred_obj = predict(gp_obj,pred_df,type="response",sd=TRUE)
+
+pred_df = pred_df %>% mutate(PostProbs=as.numeric(pred_obj$fit),
+                             se = ifelse(!is.na(pred_obj$sd),pred_obj$sd,0), 
+                             lower = PostProbs - 1.96*se,
+                             upper = PostProbs + 1.96*se)
+# ggplot(post_probs,aes(x=eta,y=PostProbs))  + xlim(c(0,1)) + ylim(c(0,2)) +
+#   geom_ribbon(data=pred_df,aes(ymin=lower,ymax=upper),fill="lightgreen",alpha=0.5) + 
+#   geom_path(data=pred_df,aes(x=eta,y=PostProbs,col=factor(I(PostProbs>0.9)),group=1),size=1.25 ) + geom_point() + 
+#   geom_hline(yintercept=0.9,col="black") + scale_colour_discrete(name="Pr(mOR<1|y)", labels=c("<=0.9 (Not Protective)",">0.9 (Protective")) + ylab("Pr(mOR<1 | y)") + xlab(expression(eta))
+
+pred_df = pred_df %>% mutate(ClassificationI = 1*(lower>0.9) + (-1)*(upper<0.9) + 0, 
+                             Classification = recode(ClassificationI, 
+                                                     '1'='Protective', '-1'='Not Protective', '0'='Unclassified',
+                                                     'NA'='Protective'))
+
+poly_frame = rbind(pred_df %>% mutate(myframe=1),pred_df%>%mutate(myframe=2)) %>% select(eta,ClassificationI,myframe,lower,upper) %>% gather(key=lu, value=limit, -eta:-myframe) %>% arrange(eta,myframe) %>% slice(-c(1:2,(nrow(.)-1),nrow(.)))
+
+poly_frame = poly_frame %>% mutate(ID=rep(1:(nrow(poly_frame)/4),each=4))
+poly_frame = poly_frame %>% group_by(ID) %>% mutate(ClassificationNew=ClassificationI[lu=="upper" & myframe==1])
+
+poly_frame = poly_frame %>%  mutate(myorder = 1*(myframe==1 & lu=="upper")+
+                                                               2*(myframe==1 & lu =="lower") + 
+                                                               3*(myframe==2 & lu =="lower") + 
+                                                               4*(myframe==2 & lu =="upper"))  %>% arrange(eta,myorder)
+
+
+myplot= ggplot(poly_frame ,aes(x=eta,y=limit,group=ID,fill=factor(ClassificationNew))) + geom_polygon() + 
+  xlim(c(0,1)) + ylim(c(0,2)) + geom_hline(yintercept=0.9) + 
+  scale_fill_manual(name="Classified",labels=c("Not Protective","Unclassified","Protective"),
+                    values=c("red","grey","blue")) + xlab(expression(eta)) + ylab("Pr(mOR<1 | y)") +
+  geom_segment(data=poly_frame %>% ungroup() %>% filter(myframe==2 & lu =="lower") %>% mutate(lagged=lag(eta)), 
+               aes(x=eta,xend=lagged, y=0.05,yend=0.05,colour=factor(ClassificationNew)),size=3) + 
+   scale_colour_manual(name="Classified",labels=c("Not Protective","Unclassified","Protective","Boundary"),
+                    values=c("red","grey","blue","black")) + guides(colour=FALSE) + guides(fill=FALSE) + 
+  geom_line(data=pred_df %>% mutate(ID=1,ClassificationNew=NA),aes(x=eta,y=PostProbs),size=1.15,col="darkgreen") + 
+    geom_point(data=post_probs %>% mutate(ID=1,ClassificationNew=NA),aes(x=eta,y=PostProbs))
+
+#myplot
+
+
+pred_df = pred_df %>% mutate(ambig = pmin(upper-0.9,0.9-lower))
+bottom = ggplot(pred_df, aes(x=eta,y=ambig)) + geom_line(size=1.15) + ylab("Ambiguity") + xlab(expression(eta))
+
+grid.arrange(grobs=list(myplot,bottom),heights=c(3,1),layout_matrix=matrix(c(1,2),ncol=1))
+```
+
+## Where to go next? 
+
+
+```{r}
+stan_out_11 = read_csv(here("results/stan_out_11.csv"))
+post_probs = rbind(stan_out_147,stan_out_1.0,stan_out_0.001,stan_out_55,stan_out_86,stan_out_11) %>% group_by(eta) %>% summarise(PostProbs = as.double(sum(medianOR<1)/n()))
+
+pred_df = data_frame(eta=seq(0,1,length=101))
+#gp_obj = with(post_probs, gausspr(x=eta,y=PostProbs,variance.model=TRUE,type="regression"))
+gp_obj = gpe::gp(PostProbs~mat32('eta'),data=post_probs)
+pred_obj = predict(gp_obj,pred_df,type="response",sd=TRUE)
+
+pred_df = pred_df %>% mutate(PostProbs=as.numeric(pred_obj$fit),
+                             se = ifelse(!is.na(pred_obj$sd),pred_obj$sd,0), 
+                             lower = PostProbs - 1.96*se,
+                             upper = PostProbs + 1.96*se)
+# ggplot(post_probs,aes(x=eta,y=PostProbs))  + xlim(c(0,1)) + ylim(c(0,2)) +
+#   geom_ribbon(data=pred_df,aes(ymin=lower,ymax=upper),fill="lightgreen",alpha=0.5) + 
+#   geom_path(data=pred_df,aes(x=eta,y=PostProbs,col=factor(I(PostProbs>0.9)),group=1),size=1.25 ) + geom_point() + 
+#   geom_hline(yintercept=0.9,col="black") + scale_colour_discrete(name="Pr(mOR<1|y)", labels=c("<=0.9 (Not Protective)",">0.9 (Protective")) + ylab("Pr(mOR<1 | y)") + xlab(expression(eta))
+
+pred_df = pred_df %>% mutate(ClassificationI = 1*(lower>0.9) + (-1)*(upper<0.9) + 0, 
+                             Classification = recode(ClassificationI, 
+                                                     '1'='Protective', '-1'='Not Protective', '0'='Unclassified',
+                                                     'NA'='Protective'))
+
+poly_frame = rbind(pred_df %>% mutate(myframe=1),pred_df%>%mutate(myframe=2)) %>% select(eta,ClassificationI,myframe,lower,upper) %>% gather(key=lu, value=limit, -eta:-myframe) %>% arrange(eta,myframe) %>% slice(-c(1:2,(nrow(.)-1),nrow(.)))
+
+poly_frame = poly_frame %>% mutate(ID=rep(1:(nrow(poly_frame)/4),each=4))
+poly_frame = poly_frame %>% group_by(ID) %>% mutate(ClassificationNew=ClassificationI[lu=="upper" & myframe==1])
+
+poly_frame = poly_frame %>%  mutate(myorder = 1*(myframe==1 & lu=="upper")+
+                                                               2*(myframe==1 & lu =="lower") + 
+                                                               3*(myframe==2 & lu =="lower") + 
+                                                               4*(myframe==2 & lu =="upper"))  %>% arrange(eta,myorder)
+
+### NEEEDED TO CHANGE because there are no unclassified points! 
+myplot= ggplot(poly_frame ,aes(x=eta,y=limit,group=ID,fill=factor(ClassificationNew))) + geom_polygon() + 
+  xlim(c(0,1)) + ylim(c(0,2)) + geom_hline(yintercept=0.9) + 
+  scale_fill_manual(name="Classified",labels=c("Not Protective","Unclassified","Protective"),
+                    values=c("red","blue","grey")) + xlab(expression(eta)) + ylab("Pr(mOR<1 | y)") +
+  geom_segment(data=poly_frame %>% ungroup() %>% filter(myframe==2 & lu =="lower") %>% mutate(lagged=lag(eta)), 
+               aes(x=eta,xend=lagged, y=0.05,yend=0.05,colour=factor(ClassificationNew)),size=3) + 
+   scale_colour_manual(name="Classified",labels=c("Not Protective","Unclassified","Protective","Boundary"),
+                    values=c("red","blue","grey","black")) + guides(colour=FALSE) + guides(fill=FALSE) + 
+  geom_line(data=pred_df %>% mutate(ID=1,ClassificationNew=NA),aes(x=eta,y=PostProbs),size=1.15,col="darkgreen") + 
+    geom_point(data=post_probs %>% mutate(ID=1,ClassificationNew=NA),aes(x=eta,y=PostProbs))
+
+#myplot
+
+
+pred_df = pred_df %>% mutate(ambig = pmin(upper-0.9,0.9-lower))
+bottom = ggplot(pred_df, aes(x=eta,y=ambig)) + geom_line(size=1.15) + ylab("Ambiguity") + xlab(expression(eta))
+
+grid.arrange(grobs=list(myplot,bottom),heights=c(3,1),layout_matrix=matrix(c(1,2),ncol=1))
+```
+
+
+## Overview of the LSE algorithm 
+
+```{r,echo=FALSE}
+
+diag_fun = function(which){
+  
+midx=0.4
+leftx= 0.25
+rightx = 0.75
+gpr = gpar(fill = "lightgrey")
+gpr2 = gpar(fill = "lightblue")
+gpr3 = gpar(fill = "lightyellow")
+
+gpr_list = lapply(c(1:5), function(x){gpar(fill="lightgrey")})
+gpr_list[[which]] = gpar(fill = "lightyellow")
+
+width=0.75
+
+grid.newpage()
+
+(init_grob = boxGrob(expression(paste("Initialize the algorithm at k values of ",eta,": S= {",PostProb[1],",",ldots,",",PostProb[k],"}")),
+                  x=midx, y=0.9,width=width,box_gp=gpr_list[[1]])) 
+plot(init_grob)
+
+(par_grob = boxGrob(expression(paste("Estimate GP posterior parameters: ",hat(mu)(eta),", ",hat(Sigma)(eta[i],eta[j]),
+                                     " for points in S")),
+                  x=midx, y=0.7,width=width,box_gp=gpr_list[[2]])) 
+
+plot(par_grob)
+
+par_init = connectGrob(init_grob,par_grob,"v",arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")))
+
+plot(par_init)
+
+(class_grob = boxGrob(expression(paste("Classify points via LCB and UCB")),
+                  x=midx, y=0.5,width=width,box_gp=gpr_list[[3]])) 
+plot(class_grob)
+
+class_par = connectGrob(par_grob,class_grob,"v",arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")))
+
+plot(class_par)
+
+(bands_grob = boxGrob(expression(paste("Find ",eta[max]," which maximizes Ambiguity(", hat(mu)(eta), ",",
+                                       hat(Sigma)(eta[i],eta[j]),") for unclassified points")),
+                  x=midx, y=0.3,width=width,box_gp=gpr_list[[4]])) 
+plot(bands_grob)
+
+bands_class = connectGrob(class_grob,bands_grob,"v",
+                         arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")))
+
+plot(bands_class)
+
+(add_grob = boxGrob(expression(paste("Evaluate PostProb at new value ",eta[max], " and add to S")),
+                  x=midx, y=0.1,width=width,box_gp=gpr_list[[5]])) 
+
+plot(add_grob)
+
+bands_add = connectGrob(bands_grob,add_grob,"v",
+                         arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")))
+
+plot(bands_add)
+
+#(repeat_grob = boxGrob(expression("Repeat"),x=0.9,y=0.1,width=0.2,box_gp=gpr))
+
+
+#add_par = connectGrob(add_grob,repeat_grob,"N","l",
+#                         arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")))
+
+#plot(add_par)
+
+grid.lines(c(0.775,0.9),c(0.1,0.1))
+grid.lines(c(0.9,0.9),c(0.1,0.7))
+grid.lines(c(0.9,0.775),c(0.7,0.7),arrow=arrow(ends="last",type="closed",length=grid::unit(0.125,"inches")),
+                                               gp=gpar(fill="black"))
+}
+
+diag_fun(1)
+```
+
+## Overview of the LSE algorithm 
+
+```{r}
+diag_fun(2)
+```
+
+## Overview of the LSE algorithm 
+
+```{r}
+diag_fun(3)
+```
+
+## Overview of the LSE algorithm 
+
+```{r}
+diag_fun(4)
+```
+
+## Overview of the LSE algorithm 
+
+```{r}
+diag_fun(5)
+```
+
+
+# The Future 
+
+## What's next? 
+
+<video data-autoplay src="giphy.mp4"></video>
+
+
+## What's next
+
+```{r}
+
+midx=0.4
+leftx= 0.25
+rightx = 0.75
+gpr = gpar(fill = "lightgrey")
+gpr2 = gpar(fill = "lightblue")
+gpr3 = gpar(fill = "lightyellow")
+
+
+width=0.75
+
+grid.newpage()
+
+grid.circle(x=0.5,y=0.8,gp=gpr2,r=0.2) 
+grid.text("More parameters", x=0.5,y=0.8,gp=gpr2) 
+
+```
+
+## What's next?
+
+```{r}
+
+
+midx=0.4
+leftx= 0.25
+rightx = 0.75
+gpr = gpar(fill = "lightgrey")
+gpr2 = gpar(fill = "lightblue")
+gpr3 = gpar(fill = "lightyellow")
+
+
+width=0.75
+
+grid.newpage()
+
+grid.circle(x=0.5,y=0.8,gp=gpr2,r=0.2) 
+grid.text("More parameters", x=0.5,y=0.8,gp=gpr2) 
+
+grid.circle(x=0.2,y=0.5,gp=gpr3,r=0.2) 
+grid.text("Parameter leverage", x=0.2,y=0.5,gp=gpr3) 
+```
+
+
+## What's next
+
+```{r}
+
+midx=0.4
+leftx= 0.25
+rightx = 0.75
+gpr = gpar(fill = "lightgrey")
+gpr2 = gpar(fill = "lightblue")
+gpr3 = gpar(fill = "lightyellow")
+
+
+width=0.75
+
+grid.newpage()
+
+grid.circle(x=0.5,y=0.8,gp=gpr2,r=0.2) 
+grid.text("More parameters", x=0.5,y=0.8,gp=gpr2) 
+
+
+grid.circle(x=0.2,y=0.5,gp=gpr3,r=0.2) 
+grid.text("Parameter leverage", x=0.2,y=0.5,gp=gpr3) 
+
+
+grid.circle(x=0.5,y=0.2,gp=gpar(fill="pink"),r=0.2) 
+grid.text("Observation leverage", x=0.5,y=0.2,gp=gpr3) 
+
+```
+
+
+
+
+## What's next
+
+```{r}
+
+midx=0.4
+leftx= 0.25
+rightx = 0.75
+gpr = gpar(fill = "lightgrey")
+gpr2 = gpar(fill = "lightblue")
+gpr3 = gpar(fill = "lightyellow")
+
+
+width=0.75
+
+grid.newpage()
+
+grid.circle(x=0.5,y=0.8,gp=gpr2,r=0.2) 
+grid.text("More parameters", x=0.5,y=0.8,gp=gpr2) 
+
+
+grid.circle(x=0.2,y=0.5,gp=gpr3,r=0.2) 
+grid.text("Parameter leverage", x=0.2,y=0.5,gp=gpr3) 
+
+
+grid.circle(x=0.5,y=0.2,gp=gpar(fill="pink"),r=0.2) 
+grid.text("Observation leverage", x=0.5,y=0.2,gp=gpr3) 
+
+
+grid.circle(x=0.8,y=0.5,gp=gpar(fill="lightgreen"),r=0.2) 
+grid.text("Generic assumptions", x=0.8,y=0.5,gp=gpr3) 
+
+```
+
+
+## References
+
+* Golding, N. 2015. gpe: Gaussian Process Everything. R package version 0.1-1. https://github.com/goldingn/gpe
+
+* Gotovos, A., Casati, N., Hitz, G. and Krause, A., 2013, August. Active learning for level set estimation. In IJCAI (pp. 1344-1350).
+
+* Higgins, J.P. and Spiegelhalter, D.J., 2002. Being sceptical about meta-analyses: a Bayesian perspective on magnesium trials in myocardial infarction. International journal of epidemiology, 31(1), pp.96-104.
+Vancouver	
+
+* Stan Development Team (2018). RStan: the R interface to Stan. R package version 2.18.2. http://mc-stan.org/.
+
+* Sterne, J., Braburn, M.J., Egger, M., Smith, G.D. and Altman, D.G., 2001. Meta-analysis in STATA TM. Systematic reviews in health care, meta-analysis in context. London: BMJ, p.357.
+
+
+
+
+
