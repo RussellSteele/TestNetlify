@@ -3,7 +3,7 @@ global {
     overflow: hidden;
     width: 100%;
     /*margin:0;*/
-    /*position: fixed;/
+    position: fixed;
     /**touch-action: none;*/
     
 }
@@ -11,27 +11,27 @@ html {
     height  : 100%;
     overflow: hidden;
     /*margin:0;*/
-    /*position: fixed;*/
+    position: fixed;
     /*touch-action: none;*/
 }
 body {
     height  : 100%;
     width: 100%;
     overflow: hidden;
-    /*margin:0;
-    position: fixed;*/
+    /*margin:0;*/
+    position: fixed;
 }
 plugin{
     height  : 100%;
     width: 100%;
     overflow: hidden;
-    /*position: fixed;
-    margin:0;*/
+    position: fixed;
+    /*margin:0;*/
 }
 .chalkboard{
     height  : 100%;
     width: 100%;
     overflow: hidden;
-    /*position: fixed;
-    margin:0;*/
+    position: fixed;
+    /*margin:0;*/
 }
