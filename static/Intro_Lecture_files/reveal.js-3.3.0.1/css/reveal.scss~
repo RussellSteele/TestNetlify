@@ -389,7 +389,7 @@ body {
 	left: 0;
 	margin: auto;
 
-	overflow: hidden;
+	overflow: visible;
 	z-index: 1;
 	text-align: center;
 	perspective: 600px;
@@ -791,7 +791,7 @@ body {
  *********************************************/
 
 .no-transforms {
-	overflow-y: hidden;
+	overflow-y: auto;
 }
 
 .no-transforms .reveal .slides {
@@ -1039,7 +1039,7 @@ body {
 		top: 0 !important;
 		background: none;
 		outline: none;
-		overflow: hidden;
+		overflow: visible;
 	}
 
 	.backgrounds {
@@ -1227,7 +1227,7 @@ body {
 	}
 
 	.reveal .overlay.overlay-help .viewport {
-		overflow: hidden;
+		overflow: auto;
 		color: #fff;
 	}
 
@@ -1353,11 +1353,11 @@ body {
 	line-height: 1.4;
 	color: #fff;
 	background-color: rgba(0,0,0,0.5);
-	overflow: hidden;
+	overflow: auto;
 	box-sizing: border-box;
 	text-align: left;
 	font-family: Helvetica, sans-serif;
-	-webkit-overflow-scrolling: auto;
+	-webkit-overflow-scrolling: touch;
 }
 
 .reveal .speaker-notes.visible:not(:empty) {
