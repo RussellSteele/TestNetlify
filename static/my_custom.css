@@ -3,7 +3,7 @@ global {
     overflow: hidden;
     width: 100%;
     /*margin:0;*/
-    position: fixed;
+    position: absolute;
     /**touch-action: none;*/
     
 }
@@ -11,7 +11,7 @@ html {
     height  : 100%;
     overflow: hidden;
     /*margin:0;*/
-    position: fixed;
+    position: absolute;
     /*touch-action: none;*/
 }
 body {
@@ -19,19 +19,19 @@ body {
     width: 100%;
     overflow: hidden;
     /*margin:0;*/
-    position: fixed;
+    position: absolute;
 }
 plugin{
     height  : 100%;
     width: 100%;
     overflow: hidden;
-    position: fixed;
+    position: absolute;
     /*margin:0;*/
 }
 .chalkboard{
     height  : 100%;
     width: 100%;
     overflow: hidden;
-    position: fixed;
+    position: absolute;
     /*margin:0;*/
 }
