@@ -699,7 +699,7 @@ var RevealChalkboard = window.RevealChalkboard || (function(){
 			event = { type: "draw", begin: Date.now() - slideStart, end: null, curve: [{x: (mouseX - xOffset)/scale, y: (mouseY-yOffset)/scale}] };
 			touchTimeout = setTimeout( showSponge, 500, mouseX, mouseY );
 		}	
-	}, false);
+	    }, passive:false);
 
 	document.addEventListener('touchmove', function(evt) {
 		clearTimeout( touchTimeout );
@@ -728,7 +728,7 @@ var RevealChalkboard = window.RevealChalkboard || (function(){
 				yLast = mouseY;
 			}
 		}
-	}, false);
+	    }, passive:false);
 
 	document.addEventListener('touchend', function(evt) {
 		clearTimeout( touchTimeout );
@@ -743,26 +743,7 @@ var RevealChalkboard = window.RevealChalkboard || (function(){
 			}
 			event = null;
 		}
-	}, false);
-
-// Prevent scrolling when touching the canvas
-	document.body.addEventListener("touchstart", function (e) {
-			       if (e.target == drawingCanvas[mode]) {
-			       e.preventDefault();
-			       }
-			       }, false);
-	document.body.addEventListener("touchend", function (e) {
-			       if (e.target == drawingCanvas[mode]) {
-			       e.preventDefault();
-			       }
-			       }, false);
-	document.body.addEventListener("touchmove", function (e) {
-			       if (e.target == drawingCanvas[mode]) {
-			       e.preventDefault();
-			       }
-			       }, false);
-
-
+	    }, passive:false);
 
 	function showSponge(x,y) {
 		if ( event ) {
