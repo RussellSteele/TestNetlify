@@ -30,7 +30,7 @@ plugin{
     touch-action: none;
     margin:0;
 }
-chalkboard{
+.chalkboard{
     height  : 100%;
     width: 100%;
     overflow: hidden;

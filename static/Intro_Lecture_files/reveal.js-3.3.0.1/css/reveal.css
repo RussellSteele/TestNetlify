@@ -323,7 +323,7 @@ body {
   bottom: 0;
   left: 0;
   margin: auto;
-  overflow: hidden;
+  overflow: visible;
   z-index: 1;
   text-align: center;
   -webkit-perspective: 600px;
@@ -766,7 +766,7 @@ body {
  * FALLBACK
  *********************************************/
 .no-transforms {
-  overflow-y: hidden; }
+  overflow-y: auto; }
 
 .no-transforms .reveal .slides {
   position: relative;
@@ -1006,7 +1006,7 @@ body {
     top: 0 !important;
     background: none;
     outline: none;
-    overflow: hidden; }
+    overflow: visible; }
   .reveal.overview .backgrounds {
     -webkit-perspective: inherit;
             perspective: inherit; }
@@ -1173,7 +1173,7 @@ body {
           transform: scale(0.2); }
 
 .reveal .overlay.overlay-help .viewport {
-  overflow: hidden;
+  overflow: auto;
   color: #fff; }
 
 .reveal .overlay.overlay-help .viewport .viewport-inner {
@@ -1287,11 +1287,11 @@ body {
   line-height: 1.4;
   color: #fff;
   background-color: rgba(0, 0, 0, 0.5);
-  overflow: hidden;
+  overflow: auto;
   box-sizing: border-box;
   text-align: left;
   font-family: Helvetica, sans-serif;
-  -webkit-overflow-scrolling: auto; }
+  -webkit-overflow-scrolling: touch; }
 
 .reveal .speaker-notes.visible:not(:empty) {
   display: block; }

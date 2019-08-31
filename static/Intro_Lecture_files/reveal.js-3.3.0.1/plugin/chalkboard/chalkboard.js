@@ -699,7 +699,7 @@ var RevealChalkboard = window.RevealChalkboard || (function(){
 			event = { type: "draw", begin: Date.now() - slideStart, end: null, curve: [{x: (mouseX - xOffset)/scale, y: (mouseY-yOffset)/scale}] };
 			touchTimeout = setTimeout( showSponge, 500, mouseX, mouseY );
 		}	
-	    }, passive:false);
+	}, false);
 
 	document.addEventListener('touchmove', function(evt) {
 		clearTimeout( touchTimeout );
@@ -728,7 +728,7 @@ var RevealChalkboard = window.RevealChalkboard || (function(){
 				yLast = mouseY;
 			}
 		}
-	    }, passive:false);
+	}, false);
 
 	document.addEventListener('touchend', function(evt) {
 		clearTimeout( touchTimeout );
@@ -743,7 +743,7 @@ var RevealChalkboard = window.RevealChalkboard || (function(){
 			}
 			event = null;
 		}
-	    }, passive:false);
+	}, false);
 
 	function showSponge(x,y) {
 		if ( event ) {
