@@ -19,7 +19,7 @@ body {
     width: 100%;
     overflow: hidden;
     /*margin:0;*/
-    position: absolute;
+    position: fixed;
 }
 plugin{
     height  : 100%;
