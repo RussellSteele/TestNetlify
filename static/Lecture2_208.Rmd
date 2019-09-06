@@ -1,0 +1,393 @@
+---
+title: "Getting data into R"
+output:   
+    revealjs::revealjs_presentation
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,comment=NA,message=FALSE)
+library(here)
+library(png)
+library(tidyverse)
+library(knitr)
+library(skimr)
+library(summarytools)
+library(tableone)
+library(arsenal)
+library(kableExtra)
+library(flextable)
+```
+
+
+# Data structures
+
+## Why we're starting here 
+
+> "Bad programmers worry about the code. Good programmers worry about 
+> data structures and their relationships." 
+>
+> `r tufte::quote_footer('--- Linus Torvalds')`
+
+
+## HTRU2 
+
+
+```{r HTRU2_Screen1}
+include_graphics(here("Data_Analyses_MATH_208/Documents/HTRU2_paper.png"))
+```
+
+## Pulsar emission profiles from [https://arxiv.org/pdf/1603.05166.pdf](https://arxiv.org/pdf/1603.05166.pdf)
+
+
+
+```{r HTRU2_Curves}
+include_graphics(c(here("Data_Analyses_MATH_208/Documents/Integrated_curve.png"), 
+                   here("Data_Analyses_MATH_208/Documents/DMSNR_curve.png")))
+```
+
+
+## The data 
+
+
+```{r}
+meas_table = tibble(Measurements = c("1. Mean of the integrated profile",
+	"2. Standard deviation of the integrated profile",
+	"3. Excess kurtosis of the integrated profile",
+	"4. Skewness of the integrated profile",
+	"5. Mean of the DM-SNR curve",
+	"6. Standard deviation of the DM-SNR curve",
+	"7. Excess kurtosis of the DM-SNR curve",
+	"8. Skewness of the DM-SNR curve",
+	"9. True or false pulsar (human-verified)"))
+kable(meas_table,format ="markdown")
+```
+
+
+## The data file
+
+
+```{r HTRU2_csv}
+include_graphics(here("Data_Analyses_MATH_208/Documents/HTRU2_csv.png"))
+```
+
+Downloaded from: [https://archive.ics.uci.edu/ml/machine-learning-databases/00372/HTRU2.zip](https://archive.ics.uci.edu/ml/machine-learning-databases/00372/HTRU2.zip)
+
+# Where do we go from here? 
+
+
+## First tip: work in scripts
+
+
+
+```{r HTRU2_scr}
+include_graphics(here("Data_Analyses_MATH_208/Documents/HTRU2_script.png"))
+```
+
+
+## Results from running code
+
+```{r HTRU2_scr_after}
+include_graphics(here("Data_Analyses_MATH_208/Documents/HTRU2_script_after.png"))
+```
+
+## What is HTRU2?
+
+```{r setup_chunk}
+read_chunk(here("Data_Analyses_MATH_208/Scripts/HTRU2.R"))
+```
+
+
+```{r read_files_chk,echo=TRUE}
+```
+
+
+```{r what_is_htru2,echo=TRUE}
+```
+
+
+# The basics
+
+## The vector
+
+```{r,echo=TRUE}
+Lengths_A <- c(52,51,60,64,69,74,78,84,86,96,104,112,118,125,132,135)
+mode(Lengths_A)
+Lengths_A[1]
+
+Lengths_A[1] <- 53
+Lengths_A[1]
+
+```
+## The vector
+
+```{r,echo=TRUE}
+
+basic = c(1,2,3)
+basic[5] = 5
+basic
+```
+
+## The vector
+
+
+```{r, echo=TRUE}
+author_list = c("J.K. Rowling", "Stephen King","Michael   Lewis",
+                "Toni Morrison","David McCullough")
+mode(author_list)
+boolean_vec = c(TRUE,FALSE,TRUE)
+mode(boolean_vec)
+```
+
+## Operators
+
+```{r,echo=TRUE}
+Lengths_A
+Lengths_A + rep(1,16)
+1:9
+```
+
+## Recycling vectors
+
+
+```{r,echo=TRUE}
+Lengths_A / rep(2.54,16)
+Lengths_A / 2.54
+```
+
+```{r,echo=TRUE}
+c(1,2,3,4)+c(3,5)
+```
+
+## Functions and Methods
+
+
+## Examples of functions 
+
+```{r}
+tibble(`Function name` = 
+         c("c","rep","seq.int","is.vector"), 
+       Argument = c("Vector elements", "times/each/length.out",
+                    "from/to/by/length.out/along.with",
+                    "Vector/mode"),       
+       `Action` = 
+         c("Creates vector","Replicates vector",
+           "Creates sequence of integers", "Returns TRUE if 
+           atomic vector")) %>% kable(format="markdown")
+
+```
+
+## More examples of functions with differing arguments
+
+```{r,echo=TRUE}
+sum(c(3,5,NA))
+sum(c(3,5,NA),na.rm=T)
+sum(c(3,5,7),c(1,1,1))
+```
+
+## Methods
+
+
+```{r,echo=TRUE}
+args(mean)
+args(mean.default)
+methods("mean")
+```
+
+# Moving beyond atomic vectors
+
+## Generic vectors
+
+```{r,echo=TRUE}
+X <- matrix(1:9,nrow=3,ncol=3)
+X
+class(X)
+mode(X)
+```
+
+## Generic vectors
+
+```{r,echo=TRUE}
+attributes(X)
+
+dim(X)
+```
+
+## Subscripting matrices
+
+```{r,echo=TRUE}
+X
+X[2,1]
+X[4]
+```
+
+## Operators for matrices
+
+```{r,echo=TRUE}
+
+X %*% t(X)
+X * t(X)
+```
+
+## Lists
+
+## List examples
+
+```{r,echo=TRUE}
+U1 = c(203, 204)
+U2 = c(323,324,447)
+U3 = c(208,427,423,523,545)
+
+mymcgill_stats = list(U1,U2,U3,"Statistics Major")
+
+mymcgill_stats
+```
+
+## Naming elements and subscripting
+
+```{r,echo=TRUE}
+mymcgill_stats = list(U1=U1,U2=U2,U3=U3,Major = "Statistics Major")
+
+mymcgill_stats
+
+mymcgill_stats[["U2"]]
+```
+
+## Comparing [[]], []. \$
+
+```{r,echo=TRUE}
+mymcgill_stats = list(U1=U1,U2=U2,U3=U3)
+
+mymcgill_stats$U2
+
+mymcgill_stats[["U2"]]
+
+mymcgill_stats["U2"]
+
+
+```
+
+## Comparing [[]], []. \$ (cont.)
+
+```{r,echo=TRUE}
+mymcgill_stats[c(2,3)]
+
+mymcgill_stats[c("U1","U3")]
+
+```
+
+## Comparing [[]], []. \$ (cont.)
+
+
+```{r,echo=TRUE}
+mymcgill_stats[[c(1,2)]] # Recursive indexing 1st of outer, 2nd of inner
+mymcgill_stats[[1]][2] # Access vector, access 2nd element
+mymcgill_stats[[1]][[2]] # Access vector, access 2nd element
+mymcgill_stats[1]$U1[2] # Access list, access U1, access 2nd element
+```
+
+
+## How do we think about datasets usually? 
+
+## Like this
+
+
+```{r HTRU2_excel}
+include_graphics(here("Data_Analyses_MATH_208/Documents/HTRU2_excel.png"))
+```
+
+## data.frame
+
+```{r, echo=TRUE}
+htru2_df = read.csv(here("Data_Analyses_MATH_208/Datasets/HTRU2/HTRU_2.csv"),
+                    header=FALSE)
+class(htru2_df)
+```
+
+```{r,echo=TRUE,size="tiny"}
+head(htru2_df)
+```
+
+## tibble 
+
+```{r,echo=TRUE}
+library(tidyverse)
+htru2_tbl = read_csv(here("Data_Analyses_MATH_208/Datasets/HTRU2/HTRU_2.csv"),
+                    col_names =FALSE)
+class(htru2_tbl)
+
+
+```
+## tibble vs. data.frame
+
+```{r,echo=TRUE}
+htru2_tbl
+```
+## tibble vs. data.frame (cont.)
+
+```{r,echo=TRUE}
+head(as.data.frame(htru2_tbl))
+```
+
+## tibble vs. data.frame, Round 2
+
+```{r,echo=TRUE}
+mymcgill_stats_tbl = tibble(Courses=list(U1=U1,U2=U2,U3=U3), 
+                            Year = c("U1","U2","U3"),
+                            Major = rep("Statistics Major",3))
+mymcgill_stats_tbl
+```
+
+## Back to HTRU2
+
+```{r,echo=TRUE}
+names(attributes(htru2_tbl))
+attributes(htru2_tbl)$names
+```
+
+```{r,echo=TRUE}
+names(htru2_tbl)= c("Mean_IP", "SD_IP", "EK_IP", "SKW_IP",
+                 "Mean_DMSNR", "SD_DMSNR", "EK_DMSNR", "SKW_DMSNR", 
+                 "Class")
+htru2_tbl
+```
+
+
+
+```{r,echo=FALSE,results='hide',warning=FALSE}
+
+Lengths_B <- c(51,53.5,56,66,68,72.5,79,80,81,91,96.8,101,110)
+Lengths_C <- c(52.5,49.5,60,65,67,74,78, 79,83,90)
+
+Dates_A <- c("2009-05-02","2009-05-11","2009-07-07","2009-09-09","2009-11-16",
+             "2010-02-16","2010-05-03","2010-11-09","2011-05-04","2012-05-03",
+             "2013-05-18","2014-07-30","2015-09-30","2016-06-08","2017-08-21",
+             "2018-09-19")
+
+Dates_B <- c("2012-08-02","2012-08-15","2012-10-31","2012-12-06","2013-02-18",
+           "2013-05-13","2013-09-05","2014-02-17","2014-07-30","2015-09-30",
+           "2016-08-04","2017-08-21","2018-09-19")
+
+Dates_C <- c("2016-02-04","2016-02-18","2016-04-11","2016-06-08",
+             "2016-08-04","2016-11-17",
+             "2017-03-02","2017-08-21","2018-02-20","2019-02-13")
+
+
+kids_heights_df <- data.frame(Kid = c(rep("A",length(Lengths_A)), 
+                                  rep("B",length(Lengths_B)),
+                                  rep("C",length(Lengths_C))), 
+                          Heights = c(Lengths_A,Lengths_B,Lengths_C),
+                          Dates = as.Date(c(Dates_A,Dates_B,Dates_C)))
+
+kids_heights_tbl <- tibble(Kid = c(rep("A",length(Lengths_A)), 
+                                  rep("B",length(Lengths_B)),
+                                  rep("C",length(Lengths_C))), 
+                          Heights = c(Lengths_A,Lengths_B,Lengths_C),
+                          Dates = as.Date(c(Dates_A,Dates_B,Dates_C)))
+
+kids_heights <- kids_heights_tbl %>% group_by(Kid) %>% 
+  mutate(Birth = min(Dates),
+         Age = as.difftime(Dates - min(Dates)))
+  
+```
+
